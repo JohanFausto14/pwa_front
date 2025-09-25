@@ -1,0 +1,20 @@
+{
+  "name": "PWA Raperos",
+  "short_name": "Rap Hits",
+  "description": "Las 5 canciones más famosas de las leyendas del rap.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A", 
+  "theme_color": "#FFC000", 
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg", 
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["music", "entertainment", "charts"],
+  "lang": "es"
+}
