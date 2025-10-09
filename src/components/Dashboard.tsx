@@ -92,7 +92,11 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             const handleMessage = (event: MessageEvent) => {
                 if (event.data && event.data.type === 'CART_SYNCED') {
                     // El SW confirma que la cola ha sido enviada con éxito
-                    showNotification(`✅ Cola OFFLINE sincronizada: ${event.data.count || ''} ítems enviados.`, 'success');
+                    showNotification(`✅ ${event.data.message || `Cola OFFLINE sincronizada: ${event.data.count || ''} ítems enviados.`}`, 'success');
+                    setIsSyncing(false); // Detener el indicador de sincronización
+                } else if (event.data && event.data.type === 'CART_SYNC_ERROR') {
+                    // El SW reporta un error de sincronización
+                    showNotification(`⚠️ Error de sincronización: ${event.data.error}. ${event.data.willRetry ? 'Se reintentará automáticamente.' : ''}`, 'error');
                     setIsSyncing(false); // Detener el indicador de sincronización
                 }
             };
@@ -133,7 +137,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
     // --- FUNCIONES DEL CARRITO ---
 
-    const addToCart = (song: Song, artist: string) => {
+    const addToCart = async (song: Song, artist: string) => {
         const cartItem: CartItem = {
             id: `${artist}-${song.name}-${Date.now()}`,
             songName: song.name,
@@ -144,12 +148,56 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             price: 9.99
         };
 
+        // Agregar al carrito local
         setCart(prev => [...prev, cartItem]);
+        
+        // Guardar inmediatamente en IndexedDB para sincronización offline
+        if (navigator.serviceWorker.controller) {
+            try {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'QUEUE_CART_ITEM',
+                    payload: {
+                        action: 'add',
+                        product: cartItem,
+                        quantity: 1,
+                        userId: user.username,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+                console.log('[Frontend] ✅ Ítem agregado a IndexedDB para sincronización');
+            } catch (error) {
+                console.warn('[Frontend] ⚠️ Error guardando en IndexedDB:', error);
+            }
+        }
+        
         showNotification(`"${song.name}" agregado al carrito`, 'success', 3000);
     };
 
     const removeFromCart = (itemId: string) => {
+        const itemToRemove = cart.find(item => item.id === itemId);
+        
+        // Remover del carrito local
         setCart(prev => prev.filter(item => item.id !== itemId));
+        
+        // También remover de IndexedDB si existe
+        if (navigator.serviceWorker.controller && itemToRemove) {
+            try {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'QUEUE_CART_ITEM',
+                    payload: {
+                        action: 'remove',
+                        product: itemToRemove,
+                        quantity: 1,
+                        userId: user.username,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+                console.log('[Frontend] ✅ Ítem removido de IndexedDB');
+            } catch (error) {
+                console.warn('[Frontend] ⚠️ Error removiendo de IndexedDB:', error);
+            }
+        }
+        
         showNotification('Álbum eliminado del carrito', 'info', 3000);
     };
 
@@ -194,6 +242,35 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         } else {
             console.warn('Background Sync no disponible. El SW usará el evento "online" si está disponible.');
         }
+    };
+
+    /**
+     * Fuerza la sincronización manual de la cola offline
+     */
+    const forceSync = async () => {
+        if (!navigator.serviceWorker.controller) {
+            showNotification('❌ Service Worker no disponible', 'error');
+            return;
+        }
+
+        setIsSyncing(true);
+        navigator.serviceWorker.controller.postMessage({
+            type: 'PROCESS_CART_QUEUE'
+        });
+    };
+
+    /**
+     * Verifica el estado de la conexión y la cola offline
+     */
+    const checkSyncStatus = async () => {
+        if (!navigator.serviceWorker.controller) {
+            showNotification('❌ Service Worker no disponible', 'error');
+            return;
+        }
+
+        navigator.serviceWorker.controller.postMessage({
+            type: 'PROCESS_CART_QUEUE'
+        });
     };
 
     const checkout = async () => {
@@ -637,7 +714,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             case 'tyler':
                 return <RapperTab rapper={rappersData.tyler} onAddToCart={addToCart} />;
             case 'settings':
-                return <SettingsTab onLogout={onLogout} />;
+                return <SettingsTab onLogout={onLogout} onForceSync={forceSync} onCheckSync={checkSyncStatus} isSyncing={isSyncing} />;
             default:
                 return <RapperTab rapper={rappersData.drake} onAddToCart={addToCart} />;
         }
@@ -860,7 +937,14 @@ function RapperTab({ rapper, onAddToCart }: { rapper: Rapper; onAddToCart: (song
     );
 }
 
-function SettingsTab({ onLogout }: { onLogout: () => void }) {
+interface SettingsTabProps {
+    onLogout: () => void;
+    onForceSync: () => void;
+    onCheckSync: () => void;
+    isSyncing: boolean;
+}
+
+function SettingsTab({ onLogout, onForceSync, onCheckSync, isSyncing }: SettingsTabProps) {
     return (
         <div className="tab-content">
             <div className="tab-header">
@@ -869,6 +953,47 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
             </div>
 
             <div className="settings-sections">
+                <div className="settings-section">
+                    <h3>Sincronización Offline</h3>
+                    <div className="setting-item">
+                        <label>Estado de sincronización</label>
+                        <div className="sync-status">
+                            {isSyncing ? (
+                                <span className="sync-indicator syncing">🔄 Sincronizando...</span>
+                            ) : (
+                                <span className="sync-indicator ready">✅ Listo para sincronizar</span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="setting-item">
+                        <label>Acciones de sincronización</label>
+                        <div className="sync-actions">
+                            <button 
+                                className="sync-button" 
+                                onClick={onCheckSync}
+                                disabled={isSyncing}
+                            >
+                                🔍 Verificar Estado
+                            </button>
+                            <button 
+                                className="sync-button primary" 
+                                onClick={onForceSync}
+                                disabled={isSyncing}
+                            >
+                                🔄 Forzar Sincronización
+                            </button>
+                        </div>
+                    </div>
+                    <div className="setting-item">
+                        <label>Auto-guardado offline</label>
+                        <input type="checkbox" defaultChecked />
+                    </div>
+                    <div className="setting-item">
+                        <label>Sincronización automática</label>
+                        <input type="checkbox" defaultChecked />
+                    </div>
+                </div>
+
                 <div className="settings-section">
                     <h3>Configuración de Cuenta</h3>
                     <div className="setting-item">
@@ -895,15 +1020,11 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
                 <div className="settings-section">
                     <h3>Configuración del Sistema</h3>
                     <div className="setting-item">
-                        <label>Auto-guardado</label>
-                        <input type="checkbox" defaultChecked />
-                    </div>
-                    <div className="setting-item">
                         <label>Modo offline</label>
                         <input type="checkbox" defaultChecked />
                     </div>
                     <div className="setting-item">
-                        <label>Sincronización automática</label>
+                        <label>Cache de recursos</label>
                         <input type="checkbox" defaultChecked />
                     </div>
                 </div>
