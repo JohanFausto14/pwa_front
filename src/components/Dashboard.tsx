@@ -178,6 +178,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Origin': window.location.origin
                 },
                 body: JSON.stringify({
                     title: '🛒 Canción agregada al carrito',

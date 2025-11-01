@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 
 const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
 
-
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
@@ -55,7 +54,14 @@ async function requestNotificationPermission(): Promise<NotificationPermission> 
 
 async function getVapidPublicKey(): Promise<string> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/vapid-public-key`);
+    const response = await fetch(`${API_BASE_URL}/api/notifications/vapid-public-key`, {
+      signal: AbortSignal.timeout(5000) // Timeout de 5 segundos
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
+    }
+    
     const data = await response.json();
     
     if (!data.success || !data.publicKey) {
@@ -64,8 +70,14 @@ async function getVapidPublicKey(): Promise<string> {
     
     return data.publicKey;
   } catch (error) {
-    console.error('Error obteniendo clave VAPID:', error);
-    throw error;
+    if (error instanceof Error) {
+      if (error.name === 'TimeoutError') {
+        console.error('⏱️ Timeout obteniendo clave VAPID');
+      } else if (error.message.includes('fetch')) {
+        console.error('📡 Backend no disponible');
+      }
+    }
+    throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté funcionando.');
   }
 }
 
@@ -116,13 +128,20 @@ async function savePushSubscription(
     const response = await fetch(`${API_BASE_URL}/api/notifications/subscribe`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Origin': window.location.origin
       },
       body: JSON.stringify({
         subscription: subscription.toJSON(),
-        userId: userId || null
-      })
+        userId: userId || null,
+        origin: window.location.origin
+      }),
+      signal: AbortSignal.timeout(5000)
     });
+
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
+    }
 
     const data = await response.json();
 
@@ -132,7 +151,10 @@ async function savePushSubscription(
 
     console.log('✅ Suscripción guardada en el servidor');
   } catch (error) {
-    console.error('Error guardando suscripción:', error);
+    if (error instanceof Error && error.message.includes('fetch')) {
+      throw new Error('No se pudo conectar con el servidor. La suscripción local está activa pero no se guardó en el backend.');
+    }
+    console.error('❌ Error guardando suscripción:', error);
     throw error;
   }
 }
@@ -154,22 +176,29 @@ async function unsubscribeFromPushNotifications(): Promise<boolean> {
     const successful = await subscription.unsubscribe();
 
     if (successful) {
-      await fetch(`${API_BASE_URL}/api/notifications/unsubscribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          endpoint: subscription.endpoint
-        })
-      });
+      // Intentar notificar al servidor, pero no fallar si no está disponible
+      try {
+        await fetch(`${API_BASE_URL}/api/notifications/unsubscribe`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            endpoint: subscription.endpoint
+          })
+        });
+        console.log('✅ Desuscripción notificada al servidor');
+      } catch (fetchError) {
+        console.warn('⚠️ No se pudo notificar al servidor (offline o no disponible)');
+        // No lanzar error, la desuscripción local ya se hizo
+      }
 
-      console.log('✅ Desuscripción exitosa');
+      console.log('✅ Desuscripción local exitosa');
     }
 
     return successful;
   } catch (error) {
-    console.error('Error desuscribiéndose:', error);
+    console.error('❌ Error desuscribiéndose:', error);
     return false;
   }
 }
@@ -231,7 +260,13 @@ export default function PushNotificationButton() {
       }
     } catch (error) {
       console.error('Error en suscripción:', error);
-      alert('❌ Error al suscribirse a notificaciones push');
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      
+      if (errorMessage.includes('conectar con el servidor')) {
+        alert('❌ No se pudo conectar con el servidor.\n\nVerifica que el backend esté funcionando en http://localhost:5000');
+      } else {
+        alert(`❌ Error al suscribirse: ${errorMessage}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -250,7 +285,9 @@ export default function PushNotificationButton() {
       }
     } catch (error) {
       console.error('Error en desuscripción:', error);
-      alert('❌ Error al desuscribirse');
+      // Aún así desactivar el toggle porque la desuscripción local podría haber funcionado
+      setIsSubscribed(false);
+      alert('⚠️ Desuscripción local completada, pero no se pudo notificar al servidor');
     } finally {
       setIsLoading(false);
     }
