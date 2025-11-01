@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import './Dashboard.css'; // Importa tus estilos CSS
+import PushNotificationButton from './PushNotificationButton';
+
 
 // Define el tag de sincronización y la URL base de la API
 const SW_SYNC_TAG = 'sync-cart';
@@ -168,6 +170,33 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             } catch (error) {
                 console.warn('[Frontend] ⚠️ Error guardando en IndexedDB:', error);
             }
+        }
+        
+        // 🔔 ENVIAR NOTIFICACIÓN PUSH AL BACKEND
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/notifications/send`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: '🛒 Canción agregada al carrito',
+                    body: `"${song.name}" de ${artist} fue agregada a tu carrito`,
+                    icon: song.albumCover,
+                    data: {
+                        type: 'cart-add',
+                        songName: song.name,
+                        artist: artist,
+                        timestamp: new Date().toISOString()
+                    }
+                })
+            });
+
+            if (response.ok) {
+                console.log('[Frontend] 🔔 Notificación push enviada');
+            }
+        } catch (error) {
+            console.warn('[Frontend] ⚠️ Error enviando notificación push:', error);
         }
         
         showNotification(`"${song.name}" agregado al carrito`, 'success', 3000);
@@ -741,6 +770,8 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                     <div className="header-left">
                         <h1>Rapper Dashboard</h1>
                         <p className="header-subtitle">Mi PWA Alvarado Fausto Ari Johan</p>
+                                        <h3>Notificaciones Push</h3>
+    <PushNotificationButton />
                     </div>
                     <div className="header-right">
                         <button className="cart-button" onClick={() => setShowCart(!showCart)}>
