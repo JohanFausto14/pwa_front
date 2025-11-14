@@ -1,6 +1,6 @@
 // src/utils/pushNotifications.ts
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://pwa-back-rgyn.onrender.com';
 
 /**
  * Convierte una clave pública VAPID base64 a Uint8Array

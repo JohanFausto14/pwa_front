@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './Login.css';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
 
 interface User {
   id: string;
