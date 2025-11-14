@@ -6,12 +6,14 @@ import PushNotificationButton from './PushNotificationButton';
 // Define el tag de sincronización y la URL base de la API
 const SW_SYNC_TAG = 'sync-cart';
 // Usando la URL base de la API que definiste en tu backend
-const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com'; 
+const API_BASE_URL = 'http://localhost:5000'; 
 
 interface User {
+    id: string;
     username: string;
     name: string;
     role: string;
+    email?: string;
 }
 
 interface DashboardProps {
@@ -772,7 +774,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                         <h1>Rapper Dashboard</h1>
                         <p className="header-subtitle">Mi PWA Alvarado Fausto Ari Johan</p>
                                         <h3>Notificaciones Push</h3>
-    <PushNotificationButton />
+<PushNotificationButton userId={user.id} />
                     </div>
                     <div className="header-right">
                         <button className="cart-button" onClick={() => setShowCart(!showCart)}>

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 // UTILIDADES PUSH NOTIFICATIONS
 // ==========================================
 
-const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
+const API_BASE_URL = 'http://localhost:5000';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -81,8 +81,7 @@ async function getVapidPublicKey(): Promise<string> {
   }
 }
 
-async function subscribeToPushNotifications(userId?: string): Promise<PushSubscription | null> {
-  try {
+async function subscribeToPushNotifications(userId?: string): Promise<PushSubscription | null> {  try {
     if (!isPushNotificationSupported()) {
       throw new Error('Push notifications no soportadas');
     }
@@ -223,7 +222,11 @@ async function isSubscribedToPush(): Promise<boolean> {
 // COMPONENTE PRINCIPAL (DISEÑO MEJORADO)
 // ==========================================
 
-export default function PushNotificationButton() {
+interface PushNotificationButtonProps {
+  userId?: string;
+}
+
+export default function PushNotificationButton({ userId }: PushNotificationButtonProps = {}) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
@@ -246,10 +249,10 @@ export default function PushNotificationButton() {
     setPermission(currentPermission);
   };
 
-  const handleSubscribe = async () => {
+const handleSubscribe = async () => {
     setIsLoading(true);
     try {
-      const subscription = await subscribeToPushNotifications(); 
+      const subscription = await subscribeToPushNotifications(userId);
       
       if (subscription) {
         setIsSubscribed(true);
