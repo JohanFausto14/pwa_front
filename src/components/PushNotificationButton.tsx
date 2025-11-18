@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 // UTILIDADES PUSH NOTIFICATIONS
 // ==========================================
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);

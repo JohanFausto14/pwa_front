@@ -6,7 +6,7 @@ import PushNotificationButton from './PushNotificationButton';
 // Define el tag de sincronización y la URL base de la API
 const SW_SYNC_TAG = 'sync-cart';
 // Usando la URL base de la API que definiste en tu backend
-const API_BASE_URL = 'http://localhost:5000'; 
+const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com'; 
 
 interface User {
     id: string;

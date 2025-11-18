@@ -2,7 +2,7 @@ const CACHE_NAME = 'pwa-Johan-v8'; // Incrementado para forzar actualización
 const RUNTIME_CACHE = 'runtime-cache-v8';
 
 // Base de la API
-let API_BASE_URL = 'http://localhost:5000';
+let API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
 
 // IndexedDB  
 const IDB_NAME = 'pwa-cart-db';
