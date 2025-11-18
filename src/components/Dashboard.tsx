@@ -6,7 +6,7 @@ import PushNotificationButton from './PushNotificationButton';
 // Define el tag de sincronización y la URL base de la API
 const SW_SYNC_TAG = 'sync-cart';
 // Usando la URL base de la API que definiste en tu backend
-const API_BASE_URL = 'https://pwa-back-rgyn.onrender.com'; 
+const API_BASE_URL = 'http://localhost:5000'; 
 
 interface User {
     id: string;
@@ -64,6 +64,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
     const [swRegistration, setSwRegistration] = useState<ServiceWorkerRegistration | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
 
     const showNotification = (message: string, type: 'success' | 'error' | 'info', duration = 5000) => {
@@ -73,6 +74,25 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
     // --- SERVICE WORKER Y SINCRONIZACIÓN SETUP ---
     useEffect(() => {
+        // Detectar cambios de conexión
+        const handleOnline = () => {
+            setIsOnline(true);
+            showNotification('🌐 Conexión restaurada. Sincronizando datos...', 'success', 3000);
+            // Forzar sincronización automática
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'PROCESS_CART_QUEUE'
+                });
+            }
+        };
+
+        const handleOffline = () => {
+            setIsOnline(false);
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
         // 1. Configuración del Service Worker y Listener
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.ready
@@ -116,8 +136,15 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
             return () => {
                 navigator.serviceWorker.removeEventListener('message', handleMessage);
+                window.removeEventListener('online', handleOnline);
+                window.removeEventListener('offline', handleOffline);
             };
         }
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
     }, []);
 
     // Cargar carrito desde localStorage al iniciar
@@ -135,8 +162,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     // Guardar carrito en localStorage cuando cambie
     useEffect(() => {
         localStorage.setItem('cart', JSON.stringify(cart));
-        // Aquí podrías agregar lógica para chequear si el carrito tiene ítems y si hay SW,
-        // para mostrar el indicador de sync, pero confiamos en el SW para eso.
     }, [cart]);
 
     // --- FUNCIONES DEL CARRITO ---
@@ -154,6 +179,13 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
         // Agregar al carrito local
         setCart(prev => [...prev, cartItem]);
+        
+        // Mensaje específico si estamos offline
+        if (!navigator.onLine) {
+            showNotification(`"${song.name}" agregado al carrito. Se sincronizará cuando vuelva la conexión.`, 'info', 4000);
+        } else {
+            showNotification(`"${song.name}" agregado al carrito`, 'success', 3000);
+        }
         
         // Guardar inmediatamente en IndexedDB para sincronización offline
         if (navigator.serviceWorker.controller) {
@@ -174,35 +206,35 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             }
         }
         
-        // 🔔 ENVIAR NOTIFICACIÓN PUSH AL BACKEND
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/notifications/send`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': window.location.origin
-                },
-                body: JSON.stringify({
-                    title: '🛒 Canción agregada al carrito',
-                    body: `"${song.name}" de ${artist} fue agregada a tu carrito`,
-                    icon: song.albumCover,
-                    data: {
-                        type: 'cart-add',
-                        songName: song.name,
-                        artist: artist,
-                        timestamp: new Date().toISOString()
-                    }
-                })
-            });
+        // 🔔 ENVIAR NOTIFICACIÓN PUSH AL BACKEND (solo si estamos online)
+        if (navigator.onLine) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/notifications/send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
+                    },
+                    body: JSON.stringify({
+                        title: '🛒 Canción agregada al carrito',
+                        body: `"${song.name}" de ${artist} fue agregada a tu carrito`,
+                        icon: song.albumCover,
+                        data: {
+                            type: 'cart-add',
+                            songName: song.name,
+                            artist: artist,
+                            timestamp: new Date().toISOString()
+                        }
+                    })
+                });
 
-            if (response.ok) {
-                console.log('[Frontend] 🔔 Notificación push enviada');
+                if (response.ok) {
+                    console.log('[Frontend] 🔔 Notificación push enviada');
+                }
+            } catch (error) {
+                console.warn('[Frontend] ⚠️ Error enviando notificación push:', error);
             }
-        } catch (error) {
-            console.warn('[Frontend] ⚠️ Error enviando notificación push:', error);
         }
-        
-        showNotification(`"${song.name}" agregado al carrito`, 'success', 3000);
     };
 
     const removeFromCart = (itemId: string) => {
@@ -731,7 +763,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             songs: []
         }
     };
-    // --- FIN DE DATOS DE RAPPERS Y RENDERIZADO ---
 
     const renderTabContent = () => {
         switch (activeTab) {
@@ -760,6 +791,14 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 </div>
             )}
             
+            {/* Indicador de estado de conexión */}
+            {!isOnline && (
+                <div className="offline-banner">
+                    <span className="offline-icon">📡</span>
+                    Modo Offline - Los cambios se sincronizarán automáticamente cuando vuelva la conexión
+                </div>
+            )}
+            
             {/* Indicador de Sincronización Pendiente */}
             {isSyncing && (
                 <div className="pending-sync-indicator">
@@ -773,8 +812,8 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                     <div className="header-left">
                         <h1>Rapper Dashboard</h1>
                         <p className="header-subtitle">Mi PWA Alvarado Fausto Ari Johan</p>
-                                        <h3>Notificaciones Push</h3>
-<PushNotificationButton userId={user.id} />
+                        <h3>Notificaciones Push</h3>
+                        <PushNotificationButton userId={user.id} />
                     </div>
                     <div className="header-right">
                         <button className="cart-button" onClick={() => setShowCart(!showCart)}>

@@ -1171,3 +1171,169 @@ body {
         opacity: 1;
     }
 }
+
+
+/* ==========================================
+   ESTILOS PARA INDICADORES OFFLINE/ONLINE
+   ========================================== */
+
+/* Banner de estado offline */
+.offline-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+    color: white;
+    padding: 12px 20px;
+    text-align: center;
+    font-weight: 600;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: slideDown 0.3s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.offline-icon {
+    font-size: 1.2em;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+/* Estilos mejorados para el indicador de sincronización */
+.pending-sync-indicator {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Ajustar posición cuando hay banner offline */
+.offline-banner ~ .pending-sync-indicator {
+    top: 60px;
+}
+
+.sync-icon {
+    font-size: 1.2em;
+    animation: rotate 1.5s linear infinite;
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Notificaciones */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+    font-weight: 500;
+    max-width: 400px;
+}
+
+/* Ajustar posición cuando hay banner offline */
+.offline-banner ~ .notification {
+    top: 70px;
+}
+
+.notification-success {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: white;
+}
+
+.notification-error {
+    background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+    color: white;
+}
+
+.notification-info {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    color: white;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .offline-banner {
+        font-size: 0.9em;
+        padding: 10px 15px;
+    }
+    
+    .pending-sync-indicator {
+        font-size: 0.9em;
+        padding: 8px 16px;
+    }
+    
+    .notification {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+        font-size: 0.9em;
+    }
+}

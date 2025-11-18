@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pwa-Johan-v7'; // Incrementado para forzar actualización
-const RUNTIME_CACHE = 'runtime-cache-v7';
+const CACHE_NAME = 'pwa-Johan-v8'; // Incrementado para forzar actualización
+const RUNTIME_CACHE = 'runtime-cache-v8';
 
 // Base de la API
-let API_BASE_URL = 'https://pwa-back-rgyn.onrender.com';
+let API_BASE_URL = 'http://localhost:5000';
 
 // IndexedDB  
 const IDB_NAME = 'pwa-cart-db';
@@ -10,7 +10,7 @@ const IDB_VERSION = 1;
 const IDB_STORE = 'cartQueue';
 
 // ==========================================
-// FUNCIONES DE INDEXEDDB (EXISTENTES)
+// FUNCIONES DE INDEXEDDB
 // ==========================================
 function openCartDB() {
   return new Promise((resolve, reject) => {
@@ -79,6 +79,9 @@ async function removeFromCartQueue(productId) {
   });
 }
 
+// ==========================================
+// PROCESAMIENTO DE COLA DE CARRITO
+// ==========================================
 async function processCartQueue() {
   try {
     const items = await idbGetAllCartRecords();
@@ -90,47 +93,96 @@ async function processCartQueue() {
       console.log('[SW] 📡 Sin conexión, no se procesa la cola');
       return;
     }
+    
     const itemsToSync = items.filter(item => item.action === 'add');
     if (!itemsToSync.length) {
       console.log('[SW] 🧺 No hay items para sincronizar');
       await idbClearCartStore();
       return;
     }
+    
+    // Agrupar items por usuario
+    const itemsByUser = itemsToSync.reduce((acc, item) => {
+      const userId = item.userId || 'unknown';
+      if (!acc[userId]) {
+        acc[userId] = [];
+      }
+      acc[userId].push(item);
+      return acc;
+    }, {});
+    
     let endpoint = '/api/cart/sync';
     try {
       endpoint = new URL('/api/cart/sync', API_BASE_URL).toString();
     } catch (_) {
       endpoint = `${API_BASE_URL.replace(/\/$/, '')}/api/cart/sync`;
     }
+    
     console.log('[SW] 🔄 Enviando cola del carrito:', itemsToSync.length, 'elementos');
-    const syncData = itemsToSync.map(item => ({
-      userId: item.userId,
-      timestamp: item.timestamp,
-      total: item.product ? item.product.price * item.quantity : 0,
-      items: item.product ? [item.product] : [],
-      createdAt: item.createdAt
-    }));
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: syncData })
+    console.log('[SW] 👥 Usuarios con items:', Object.keys(itemsByUser).join(', '));
+    
+    // Enviar un request por cada usuario con sus items
+    const syncPromises = Object.entries(itemsByUser).map(async ([userId, userItems]) => {
+      const syncData = userItems.map(item => ({
+        userId: item.userId,
+        timestamp: item.timestamp,
+        total: item.product ? item.product.price * item.quantity : 0,
+        items: item.product ? [item.product] : [],
+        createdAt: item.createdAt
+      }));
+      
+      console.log(`[SW] 📤 Sincronizando ${userItems.length} items para usuario: ${userId}`);
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-User-ID': userId // Header adicional para identificar al usuario
+        },
+        body: JSON.stringify({ 
+          userId: userId, // Asegurar que el userId esté en el body
+          items: syncData 
+        })
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Respuesta no OK al sincronizar para ${userId}: ${res.status}`);
+      }
+      
+      return userItems.length;
     });
-    if (!res.ok) {
-      throw new Error('Respuesta no OK al sincronizar: ' + res.status);
-    }
+    
+    const results = await Promise.all(syncPromises);
+    const totalSynced = results.reduce((sum, count) => sum + count, 0);
+    
     await idbClearCartStore();
     console.log('[SW] ✅ Cola sincronizada y limpiada');
+    
     const allClients = await self.clients.matchAll({ includeUncontrolled: true });
     allClients.forEach((client) => {
-      client.postMessage({ type: 'CART_SYNCED', count: itemsToSync.length });
+      client.postMessage({ 
+        type: 'CART_SYNCED', 
+        count: totalSynced,
+        message: `Sincronización exitosa: ${totalSynced} ítems enviados`
+      });
     });
   } catch (err) {
     console.warn('[SW] ⚠️ No se pudo sincronizar la cola:', err && err.message);
+    
+    // Notificar error a los clientes
+    const allClients = await self.clients.matchAll({ includeUncontrolled: true });
+    allClients.forEach((client) => {
+      client.postMessage({ 
+        type: 'CART_SYNC_ERROR', 
+        error: err.message,
+        willRetry: true
+      });
+    });
   }
 }
 
 // ==========================================
-// 🔔 MANEJO DE NOTIFICACIONES PUSH (NUEVO)
+// 🔔 MANEJO DE NOTIFICACIONES PUSH
 // ==========================================
 
 // Evento: Push recibido
@@ -225,7 +277,7 @@ self.addEventListener('notificationclose', (event) => {
 });
 
 // ==========================================
-// CACHE Y PRECACHE (EXISTENTE)
+// CACHE Y PRECACHE
 // ==========================================
 
 const PRECACHE_URLS = [
@@ -354,7 +406,9 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Mensajes
+// ==========================================
+// MENSAJES DEL CLIENTE
+// ==========================================
 self.addEventListener('message', (event) => {
   console.log('[SW] 📨 Mensaje recibido:', event.data);
   
@@ -395,7 +449,7 @@ self.addEventListener('message', (event) => {
     const base = event.data.baseUrl;
     if (typeof base === 'string' && base.length > 0) {
       API_BASE_URL = base;
-      console.log('[SW] 🔧 API_BASE_URL:', API_BASE_URL);
+      console.log('[SW] 🔧 API_BASE_URL actualizada:', API_BASE_URL);
     }
   }
 
@@ -404,17 +458,28 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// ==========================================
+// EVENTOS DE CONEXIÓN
+// ==========================================
+
 // Online/Offline
 self.addEventListener('online', () => {
-  console.log('[SW] 🌐 Conexión restaurada');
-  processCartQueue();
+  console.log('[SW] 🌐 Conexión restaurada - Iniciando sincronización automática');
+  // Sincronizar automáticamente sin esperar a que el usuario recargue
+  processCartQueue().then(() => {
+    console.log('[SW] ✅ Sincronización automática completada');
+  }).catch((err) => {
+    console.error('[SW] ❌ Error en sincronización automática:', err);
+  });
 });
 
 self.addEventListener('offline', () => {
-  console.log('[SW] 📡 Sin conexión');
+  console.log('[SW] 📡 Sin conexión - Modo offline activado');
 });
 
-// Background Sync
+// ==========================================
+// BACKGROUND SYNC
+// ==========================================
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-cart') {
     console.log('[SW] 🔄 Background Sync: sync-cart');
@@ -422,4 +487,4 @@ self.addEventListener('sync', (event) => {
   }
 });
 
-console.log('[SW] 🎬 Service Worker cargado con soporte para Push Notifications');
+console.log('[SW] 🎬 Service Worker cargado con soporte para Push Notifications y Sincronización Offline');
